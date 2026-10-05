@@ -183,6 +183,10 @@ class KWIN_EXPORT Options : public QObject
     Q_PROPERTY(float electricBorderCornerRatio READ electricBorderCornerRatio WRITE setElectricBorderCornerRatio NOTIFY electricBorderCornerRatioChanged)
     Q_PROPERTY(bool borderlessMaximizedWindows READ borderlessMaximizedWindows WRITE setBorderlessMaximizedWindows NOTIFY borderlessMaximizedWindowsChanged)
     /**
+     * Whether windows on an output that gets removed are moved to one of the remaining outputs.
+     */
+    Q_PROPERTY(bool relocateWindowsOnOutputRemoval READ relocateWindowsOnOutputRemoval WRITE setRelocateWindowsOnOutputRemoval NOTIFY relocateWindowsOnOutputRemovalChanged)
+    /**
      * timeout before non-responding application will be killed after attempt to close.
      */
     Q_PROPERTY(int killPingTimeout READ killPingTimeout WRITE setKillPingTimeout NOTIFY killPingTimeoutChanged)
@@ -633,6 +637,11 @@ public:
         return borderless_maximized_windows;
     }
 
+    bool relocateWindowsOnOutputRemoval() const
+    {
+        return relocate_windows_on_output_removal;
+    }
+
     /**
      * Timeout before non-responding application will be killed after attempt to close.
      */
@@ -715,6 +724,7 @@ public:
     void setElectricBorderTiling(bool electricBorderTiling);
     void setElectricBorderCornerRatio(float electricBorderCornerRatio);
     void setBorderlessMaximizedWindows(bool borderlessMaximizedWindows);
+    void setRelocateWindowsOnOutputRemoval(bool relocate);
     void setKillPingTimeout(int killPingTimeout);
     void setCompositingMode(int compositingMode);
     void setAllowTearing(bool allow);
@@ -893,6 +903,7 @@ Q_SIGNALS:
     void electricBorderCornerRatioChanged();
     void electricBorderAllScreenCornerChanged();
     void borderlessMaximizedWindowsChanged();
+    void relocateWindowsOnOutputRemovalChanged();
     void killPingTimeoutChanged();
     void compositingModeChanged();
     void animationSpeedChanged();
@@ -964,6 +975,7 @@ private:
     bool electric_border_all_screen_corner;
     float electric_border_corner_ratio;
     bool borderless_maximized_windows;
+    bool relocate_windows_on_output_removal;
     bool condensed_title;
 
     bool m_allowTearing = true;

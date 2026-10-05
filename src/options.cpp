@@ -80,6 +80,7 @@ Options::Options(QObject *parent)
     , electric_border_tiling(false)
     , electric_border_corner_ratio(0.0)
     , borderless_maximized_windows(false)
+    , relocate_windows_on_output_removal(true)
     , condensed_title(false)
 {
     m_settings->setDefaults();
@@ -573,6 +574,15 @@ void Options::setBorderlessMaximizedWindows(bool borderlessMaximizedWindows)
     Q_EMIT borderlessMaximizedWindowsChanged();
 }
 
+void Options::setRelocateWindowsOnOutputRemoval(bool relocate)
+{
+    if (relocate_windows_on_output_removal == relocate) {
+        return;
+    }
+    relocate_windows_on_output_removal = relocate;
+    Q_EMIT relocateWindowsOnOutputRemovalChanged();
+}
+
 void Options::setKillPingTimeout(int killPingTimeout)
 {
     if (m_killPingTimeout == killPingTimeout) {
@@ -755,6 +765,7 @@ void Options::syncFromKcfgc()
     setSnapOnlyWhenOverlapping(m_settings->snapOnlyWhenOverlapping());
     setKillPingTimeout(m_settings->killPingTimeout());
     setBorderlessMaximizedWindows(m_settings->borderlessMaximizedWindows());
+    setRelocateWindowsOnOutputRemoval(m_settings->relocateWindowsOnOutputRemoval());
     setElectricBorderMaximize(m_settings->electricBorderMaximize());
     setElectricBorderTiling(m_settings->electricBorderTiling());
     setElectricBorderCornerRatio(m_settings->electricBorderCornerRatio());

@@ -1461,6 +1461,10 @@ void Workspace::updateOutputs()
                 }
             });
 
+            if (!options->relocateWindowsOnOutputRemoval()) {
+                continue;
+            }
+
             // Migrate windows from the defunct quick tile to a quick tile tree on another output.
             static constexpr QuickTileMode quickTileModes[] = {
                 QuickTileFlag::Left,

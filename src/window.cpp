@@ -4036,6 +4036,23 @@ void Window::checkWorkspacePosition(RectF oldGeometry, LogicalOutput *oldOutput)
         // check if the window is on an about to be destroyed output
         LogicalOutput *newOutput = oldOutput;
         if (!workspace()->outputs().contains(newOutput)) {
+            if (!options->relocateWindowsOnOutputRemoval()) {
+                // Leave the window where it was, only compensating for a shift of the global
+                // coordinate space caused by normalizing the output layout.
+                const auto previousScreenSizes = workspace()->previousScreenSizes();
+                const auto outputs = workspace()->outputs();
+                for (const LogicalOutput *output : outputs) {
+                    const auto it = previousScreenSizes.constFind(output);
+                    if (it != previousScreenSizes.constEnd()) {
+                        newGeom.translate(output->geometry().topLeft() - it->topLeft());
+                        break;
+                    }
+                }
+                if (newGeom != moveResizeGeometry()) {
+                    moveResize(newGeom);
+                }
+                return;
+            }
             newOutput = workspace()->outputAt(newGeom.center());
         }
         // we need to find the screen area as it was before the change
