@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: None
+# SPDX-License-Identifier: CC0-1.0
+
+# Build-only check using KDE's CI image and ci-utilities, mirroring the
+# suse_tumbleweed_qt611 job from .gitlab-ci.yml (which only runs on invent.kde.org).
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: invent-registry.kde.org/sysadmin/ci-images/suse-qt611:latest
+      options: --user root
+    env:
+      KDECI_PLATFORM_PATH: suse-qt6.11
+      KDECI_CC_CACHE: /ccache
+      KDECI_CACHE_PATH: /artifacts
+      KDECI_GITLAB_SERVER: https://invent.kde.org/
+      KDECI_PACKAGE_PROJECT: teams/ci-artifacts/suse-qt6.11
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: /ccache
+          key: ccache-suse-qt611-${{ github.sha }}
+          restore-keys: ccache-suse-qt611-
+
+      - name: Fetch ci-utilities
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git clone https://invent.kde.org/sysadmin/ci-utilities.git --depth=1
+          git clone https://invent.kde.org/sysadmin/repo-metadata.git ci-utilities/repo-metadata/ --depth=1
+
+      - name: Build
+        run: python3 -u ci-utilities/run-ci-build.py --project kwin --branch master --platform Linux/Qt6/Shared --skip-publishing --only-build
