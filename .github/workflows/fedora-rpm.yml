@@ -52,8 +52,10 @@ jobs:
           body: |
             Fedora `${{ env.NVR }}` rebuilt with `kwin-no-relocate.patch` (adds `[Windows] RelocateWindowsOnOutputRemoval`).
 
-            Install on rpm-ostree / bootc images (download all the .rpm files except the .src.rpm first):
+            On rpm-ostree / bootc images, replace only the kwin packages that are installed
+            (check with `rpm -qa 'kwin*'`; typically kwin, kwin-common and kwin-libs):
             ```
-            rpm-ostree override replace ./kwin*.rpm
+            rpm-ostree override replace ./kwin-[0-9]*.x86_64.rpm ./kwin-common-*.rpm ./kwin-libs-*.rpm
             ```
+            In a Containerfile-built image, `dnf install -y` the same files instead.
           files: rpms/*.rpm
