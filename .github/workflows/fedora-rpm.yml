@@ -1,0 +1,59 @@
+# SPDX-FileCopyrightText: None
+# SPDX-License-Identifier: CC0-1.0
+
+# Rebuild Fedora's kwin package with packaging/fedora/kwin-no-relocate.patch
+# and publish the RPMs as a GitHub release.
+name: Fedora RPM
+
+on:
+  push:
+    paths:
+      - packaging/fedora/**
+      - .github/workflows/fedora-rpm.yml
+  workflow_dispatch:
+    inputs:
+      nvr:
+        description: Fedora kwin build to rebuild (koji NVR)
+        default: kwin-6.7.5-1.fc44
+      fedora:
+        description: Fedora release (container tag), must match the NVR's dist
+        default: "44"
+
+env:
+  NVR: ${{ inputs.nvr || 'kwin-6.7.5-1.fc44' }}
+
+jobs:
+  rpm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    container:
+      image: fedora:${{ inputs.fedora || '44' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build RPMs
+        run: packaging/fedora/build-rpm.sh "$NVR" "$GITHUB_WORKSPACE/rpms"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.NVR }}-rpms
+          path: rpms/*.rpm
+
+      - name: Compute release tag
+        id: tag
+        run: echo "tag=$(echo "$NVR" | sed -E 's/-([0-9]+)(\.fc[0-9]+)$/-\1.norelocate\2/')-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ${{ steps.tag.outputs.tag }}
+          body: |
+            Fedora `${{ env.NVR }}` rebuilt with `kwin-no-relocate.patch` (adds `[Windows] RelocateWindowsOnOutputRemoval`).
+
+            Install on rpm-ostree / bootc images (download all the .rpm files except the .src.rpm first):
+            ```
+            rpm-ostree override replace ./kwin*.rpm
+            ```
+          files: rpms/*.rpm

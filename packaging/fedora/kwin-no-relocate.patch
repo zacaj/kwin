@@ -1,0 +1,169 @@
+From 68cb909cea96ed2cbb4775f08fea64bd7ebfca13 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 5 Oct 2026 16:44:20 +0000
+Subject: [PATCH] Add option to not relocate windows when their output is
+ removed
+
+Adds Windows/RelocateWindowsOnOutputRemoval (default true). When disabled,
+windows on a removed output keep their geometry (only compensating for the
+global coordinate shift from layout normalization) instead of being moved
+onto a remaining output, and quick-tiled windows are not migrated to another
+output's tile tree.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DFQwSpxBkvHMh9i7UwzNqh
+---
+ src/kwin.kcfg     |  3 +++
+ src/options.cpp   | 11 +++++++++++
+ src/options.h     | 12 ++++++++++++
+ src/window.cpp    | 17 +++++++++++++++++
+ src/workspace.cpp |  4 ++++
+ 5 files changed, 47 insertions(+)
+
+diff --git a/src/kwin.kcfg b/src/kwin.kcfg
+index e6dba4a..ef402dc 100644
+--- a/src/kwin.kcfg
++++ b/src/kwin.kcfg
+@@ -220,6 +220,9 @@
+         <entry name="BorderlessMaximizedWindows" type="Bool">
+             <default>false</default>
+         </entry>
++        <entry name="RelocateWindowsOnOutputRemoval" type="Bool">
++            <default>true</default>
++        </entry>
+         <entry name="InteractiveWindowMoveEnabled" type="Bool">
+             <default>true</default>
+         </entry>
+diff --git a/src/options.cpp b/src/options.cpp
+index 9024359..da201c4 100644
+--- a/src/options.cpp
++++ b/src/options.cpp
+@@ -80,6 +80,7 @@ Options::Options(QObject *parent)
+     , electric_border_tiling(false)
+     , electric_border_corner_ratio(0.0)
+     , borderless_maximized_windows(false)
++    , relocate_windows_on_output_removal(true)
+     , condensed_title(false)
+ {
+     m_settings->setDefaults();
+@@ -573,6 +574,15 @@ void Options::setBorderlessMaximizedWindows(bool borderlessMaximizedWindows)
+     Q_EMIT borderlessMaximizedWindowsChanged();
+ }
+ 
++void Options::setRelocateWindowsOnOutputRemoval(bool relocate)
++{
++    if (relocate_windows_on_output_removal == relocate) {
++        return;
++    }
++    relocate_windows_on_output_removal = relocate;
++    Q_EMIT relocateWindowsOnOutputRemovalChanged();
++}
++
+ void Options::setKillPingTimeout(int killPingTimeout)
+ {
+     if (m_killPingTimeout == killPingTimeout) {
+@@ -755,6 +765,7 @@ void Options::syncFromKcfgc()
+     setSnapOnlyWhenOverlapping(m_settings->snapOnlyWhenOverlapping());
+     setKillPingTimeout(m_settings->killPingTimeout());
+     setBorderlessMaximizedWindows(m_settings->borderlessMaximizedWindows());
++    setRelocateWindowsOnOutputRemoval(m_settings->relocateWindowsOnOutputRemoval());
+     setElectricBorderMaximize(m_settings->electricBorderMaximize());
+     setElectricBorderTiling(m_settings->electricBorderTiling());
+     setElectricBorderCornerRatio(m_settings->electricBorderCornerRatio());
+diff --git a/src/options.h b/src/options.h
+index 118cae2..7f7e7ea 100644
+--- a/src/options.h
++++ b/src/options.h
+@@ -182,6 +182,10 @@ class KWIN_EXPORT Options : public QObject
+      */
+     Q_PROPERTY(float electricBorderCornerRatio READ electricBorderCornerRatio WRITE setElectricBorderCornerRatio NOTIFY electricBorderCornerRatioChanged)
+     Q_PROPERTY(bool borderlessMaximizedWindows READ borderlessMaximizedWindows WRITE setBorderlessMaximizedWindows NOTIFY borderlessMaximizedWindowsChanged)
++    /**
++     * Whether windows on an output that gets removed are moved to one of the remaining outputs.
++     */
++    Q_PROPERTY(bool relocateWindowsOnOutputRemoval READ relocateWindowsOnOutputRemoval WRITE setRelocateWindowsOnOutputRemoval NOTIFY relocateWindowsOnOutputRemovalChanged)
+     /**
+      * timeout before non-responding application will be killed after attempt to close.
+      */
+@@ -633,6 +637,11 @@ public:
+         return borderless_maximized_windows;
+     }
+ 
++    bool relocateWindowsOnOutputRemoval() const
++    {
++        return relocate_windows_on_output_removal;
++    }
++
+     /**
+      * Timeout before non-responding application will be killed after attempt to close.
+      */
+@@ -715,6 +724,7 @@ public:
+     void setElectricBorderTiling(bool electricBorderTiling);
+     void setElectricBorderCornerRatio(float electricBorderCornerRatio);
+     void setBorderlessMaximizedWindows(bool borderlessMaximizedWindows);
++    void setRelocateWindowsOnOutputRemoval(bool relocate);
+     void setKillPingTimeout(int killPingTimeout);
+     void setCompositingMode(int compositingMode);
+     void setAllowTearing(bool allow);
+@@ -893,6 +903,7 @@ Q_SIGNALS:
+     void electricBorderCornerRatioChanged();
+     void electricBorderAllScreenCornerChanged();
+     void borderlessMaximizedWindowsChanged();
++    void relocateWindowsOnOutputRemovalChanged();
+     void killPingTimeoutChanged();
+     void compositingModeChanged();
+     void animationSpeedChanged();
+@@ -964,6 +975,7 @@ private:
+     bool electric_border_all_screen_corner;
+     float electric_border_corner_ratio;
+     bool borderless_maximized_windows;
++    bool relocate_windows_on_output_removal;
+     bool condensed_title;
+ 
+     bool m_allowTearing = true;
+diff --git a/src/window.cpp b/src/window.cpp
+index 27e8ec9..6a237fd 100644
+--- a/src/window.cpp
++++ b/src/window.cpp
+@@ -4036,6 +4036,23 @@ void Window::checkWorkspacePosition(RectF oldGeometry, LogicalOutput *oldOutput)
+         // check if the window is on an about to be destroyed output
+         LogicalOutput *newOutput = oldOutput;
+         if (!workspace()->outputs().contains(newOutput)) {
++            if (!options->relocateWindowsOnOutputRemoval()) {
++                // Leave the window where it was, only compensating for a shift of the global
++                // coordinate space caused by normalizing the output layout.
++                const auto previousScreenSizes = workspace()->previousScreenSizes();
++                const auto outputs = workspace()->outputs();
++                for (const LogicalOutput *output : outputs) {
++                    const auto it = previousScreenSizes.constFind(output);
++                    if (it != previousScreenSizes.constEnd()) {
++                        newGeom.translate(output->geometry().topLeft() - it->topLeft());
++                        break;
++                    }
++                }
++                if (newGeom != moveResizeGeometry()) {
++                    moveResize(newGeom);
++                }
++                return;
++            }
+             newOutput = workspace()->outputAt(newGeom.center());
+         }
+         // we need to find the screen area as it was before the change
+diff --git a/src/workspace.cpp b/src/workspace.cpp
+index 26a2f6b..60e246e 100644
+--- a/src/workspace.cpp
++++ b/src/workspace.cpp
+@@ -1461,6 +1461,10 @@ void Workspace::updateOutputs()
+                 }
+             });
+ 
++            if (!options->relocateWindowsOnOutputRemoval()) {
++                continue;
++            }
++
+             // Migrate windows from the defunct quick tile to a quick tile tree on another output.
+             static constexpr QuickTileMode quickTileModes[] = {
+                 QuickTileFlag::Left,
+-- 
+2.43.0
+
